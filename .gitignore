@@ -1,7 +1,6 @@
 # Build outputs (rebuild with build_installer.ps1)
 build/
 dist/
-installer/
 
 # Local data — real user/customer data and app settings
 image_reports.db
