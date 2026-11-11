@@ -1,0 +1,22 @@
+# Build outputs (rebuild with build_installer.ps1)
+build/
+dist/
+installer/
+
+# Local data — real user/customer data and app settings
+image_reports.db
+*.db
+settings.json
+ImageMeasurementTool_Data_Backup*.db
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Local tooling / scratch
+opencode.json
+test_output.log
+*.tmp
