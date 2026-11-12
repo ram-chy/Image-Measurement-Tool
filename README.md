@@ -43,7 +43,7 @@ Highlights:
 
 ## Install (end users)
 
-Run **`installer/ImageMeasureTool_Setup_v1.5.1.exe`** and follow the wizard.
+Run **`installer/ImageMeasureTool_Setup_v1.5.2.exe`** and follow the wizard.
 
 - Installs to `C:\Program Files\Image Measurement Tool`
 - Start Menu shortcut (and optional Desktop shortcut)
@@ -82,7 +82,7 @@ powershell -ExecutionPolicy Bypass -File .\build_installer.ps1
 ```
 
 The script builds `dist\ImageMeasureTool.exe` (PyInstaller, one-file, no console)
-and then compiles `installer\ImageMeasureTool_Setup_v1.5.1.exe`.
+and then compiles `installer\ImageMeasureTool_Setup_v1.5.2.exe`.
 
 ## Project layout
 

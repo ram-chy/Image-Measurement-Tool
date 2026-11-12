@@ -98,7 +98,7 @@ class NoButtons:
 # ══════════════════════════════════════════════════════════════════════════════
 def test_version_and_naming_helpers():
     section("Version + rename helpers (Requirement 3)")
-    check("package version is 1.5.1", __version__ == "1.5.1", __version__)
+    check("package version is 1.5.2", __version__ == "1.5.2", __version__)
 
     check("IMG_001.jpg + Sharma-House -> Sharma-House_IMG_001.jpg",
           _apply_item_prefix("IMG_001.jpg", "Sharma-House") ==
@@ -190,7 +190,9 @@ def test_token_window():
     w.ed_mobile.setText("9876543210")
     w.showNormal()
     with mock.patch.object(sys.modules["image_analyzer.ui.token"],
-                           "TokenPreviewDialog") as preview:
+                           "TokenPreviewDialog") as preview, \
+            mock.patch.object(TokenWindow, "_ask_paper_size",
+                              return_value=("a4", None, None)):
         preview.return_value = QDialog()
         preview.return_value.exec = lambda: 0
         w._generate()

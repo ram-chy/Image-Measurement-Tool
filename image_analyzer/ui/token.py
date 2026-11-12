@@ -93,6 +93,87 @@ def _entry_key(entry: dict) -> tuple:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  Paper-size prompt (asked before a token is generated)
+# ═══════════════════════════════════════════════════════════════════════════════
+class PaperSizeDialog(QDialog):
+    """Ask which paper size the token slip should use before generating it."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Select Paper Size")
+        self.setModal(True)
+        self.setStyleSheet(_TICKET_QSS)
+        self.setMinimumWidth(420)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(18, 16, 18, 16)
+        root.setSpacing(10)
+
+        title = QLabel("🖨  Choose paper size for this token")
+        title.setStyleSheet(
+            f"color:{C_PRIMARY}; font-size:16pt; font-weight:bold;"
+        )
+        root.addWidget(title)
+
+        self.cmb_format = QComboBox()
+        for label, value in _format_choices():
+            self.cmb_format.addItem(label, value)
+        self.cmb_format.setMinimumHeight(38)
+        self.cmb_format.currentIndexChanged.connect(self._update_custom)
+        root.addWidget(self.cmb_format)
+
+        custom_row = QHBoxLayout()
+        custom_row.setSpacing(6)
+        self.lbl_custom_w = QLabel("W:")
+        self.spn_custom_w = QDoubleSpinBox()
+        self.spn_custom_w.setRange(30.0, 1200.0)
+        self.spn_custom_w.setDecimals(1)
+        self.spn_custom_w.setValue(100.0)
+        self.spn_custom_w.setSuffix(" mm")
+        self.spn_custom_x = QLabel("×")
+        self.spn_custom_h = QDoubleSpinBox()
+        self.spn_custom_h.setRange(30.0, 3000.0)
+        self.spn_custom_h.setDecimals(1)
+        self.spn_custom_h.setValue(150.0)
+        self.spn_custom_h.setSuffix(" mm")
+        custom_row.addWidget(self.lbl_custom_w)
+        custom_row.addWidget(self.spn_custom_w)
+        custom_row.addWidget(self.spn_custom_x)
+        custom_row.addWidget(self.spn_custom_h)
+        custom_row.addStretch()
+        root.addLayout(custom_row)
+
+        buttons = QHBoxLayout()
+        buttons.setSpacing(10)
+        btn_ok = QPushButton("Generate Token")
+        btn_ok.setObjectName("Primary")
+        btn_ok.setFixedHeight(42)
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.setObjectName("Secondary")
+        btn_cancel.setFixedHeight(42)
+        btn_cancel.clicked.connect(self.reject)
+        buttons.addWidget(btn_ok)
+        buttons.addStretch()
+        buttons.addWidget(btn_cancel)
+        root.addLayout(buttons)
+
+        self._update_custom()
+
+    def _update_custom(self):
+        custom = self.cmb_format.currentData() == "custom"
+        for widget in (self.lbl_custom_w, self.spn_custom_w,
+                       self.spn_custom_x, self.spn_custom_h):
+            widget.setEnabled(custom)
+
+    def selection(self) -> tuple[str, float | None, float | None]:
+        fmt = self.cmb_format.currentData() or "a4"
+        if fmt == "custom":
+            return fmt, self.spn_custom_w.value(), self.spn_custom_h.value()
+        return fmt, None, None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  Separate token-generation window
 # ═══════════════════════════════════════════════════════════════════════════════
 class TokenWindow(QDialog):
@@ -437,6 +518,13 @@ class TokenWindow(QDialog):
         self.lbl_status.setText("Token file list cleared.")
 
     # ── Token generation ──────────────────────────────────────────────────────
+    def _ask_paper_size(self):
+        """Show the paper-size prompt; returns (fmt, width, height) or None."""
+        dlg = PaperSizeDialog(self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dlg.selection()
+
     def _generate(self):
         selected = self._selected_indices()
         if not selected:
@@ -460,6 +548,11 @@ class TokenWindow(QDialog):
                                 "Please enter a valid mobile number.")
             self.ed_mobile.setFocus()
             return
+
+        paper = self._ask_paper_size()
+        if paper is None:
+            return
+        fmt, custom_w, custom_h = paper
 
         item = self._current_item
 
@@ -496,7 +589,10 @@ class TokenWindow(QDialog):
             f"({len(files)} file(s)). "
             f"{len(self._entries)} file(s) still waiting."
         )
-        TokenPreviewDialog(token, self).exec()
+        TokenPreviewDialog(
+            token, self, fmt=fmt,
+            custom_width_mm=custom_w, custom_height_mm=custom_h,
+        ).exec()
 
     # ── Token records ─────────────────────────────────────────────────────────
     def _open_records(self):
@@ -624,7 +720,9 @@ class TokenHistoryDialog(QDialog):
 # ═══════════════════════════════════════════════════════════════════════════════
 class TokenPreviewDialog(QDialog):
 
-    def __init__(self, token: dict, parent=None):
+    def __init__(self, token: dict, parent=None, fmt: str = "a4",
+                 custom_width_mm: float | None = None,
+                 custom_height_mm: float | None = None):
         super().__init__(parent)
         self.token = token
         self.setWindowTitle(f"Token Slip — {token.get('token_no', '')}")
@@ -711,6 +809,14 @@ class TokenPreviewDialog(QDialog):
         buttons.addStretch()
         buttons.addWidget(btn_close)
         root.addLayout(buttons)
+
+        if custom_width_mm is not None:
+            self.spn_custom_w.setValue(float(custom_width_mm))
+        if custom_height_mm is not None:
+            self.spn_custom_h.setValue(float(custom_height_mm))
+        idx = self.cmb_format.findData(fmt)
+        if idx >= 0:
+            self.cmb_format.setCurrentIndex(idx)
 
         self._update_preview()
 

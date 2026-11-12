@@ -100,7 +100,7 @@ def build_token_html(token: dict, fmt: str = "a4",
     For "custom", `custom_width_mm` picks the closest hand-tuned layout for
     the paper width (>=170 mm → A4, >=100 mm → A5, narrower → thermal).
     token keys used: token_no, created_at, customer_name, customer_mobile,
-                     file_count, files
+                     created_by_name, file_count, files
     files: [{"file_name": ..., "color_mode": ...,
              "width_inch": ..., "height_inch": ...}, ...]
     """
@@ -109,6 +109,9 @@ def build_token_html(token: dict, fmt: str = "a4",
     customer_name = html.escape(str(token.get("customer_name", "")))
     customer_mobile = html.escape(str(token.get("customer_mobile", "")))
     created_at = html.escape(_format_created(token.get("created_at", "")))
+    user_name = html.escape(
+        str(token.get("created_by_name") or token.get("created_by") or "—")
+    )
     count = token.get("file_count", len(files))
 
     if fmt == "custom":
@@ -124,14 +127,11 @@ def build_token_html(token: dict, fmt: str = "a4",
             fmt = "thermal"
 
     if fmt == "thermal":
-        base, title, sub, token_pt, table_pt = 8.5, 13, 8.5, 11, 8
-        contact_pt = 8
+        base, title, sub, token_pt, table_pt = 8, 13, 7.5, 9.5, 8
     elif fmt == "a5":
-        base, title, sub, token_pt, table_pt = 10, 17, 9.5, 13, 9.5
-        contact_pt = 9
+        base, title, sub, token_pt, table_pt = 9, 14, 8, 10.5, 9
     else:  # a4
-        base, title, sub, token_pt, table_pt = 11.5, 24, 11, 16, 10.5
-        contact_pt = 10
+        base, title, sub, token_pt, table_pt = 9, 15, 8.5, 11, 9
 
     is_thermal = fmt == "thermal"
 
@@ -149,8 +149,8 @@ def build_token_html(token: dict, fmt: str = "a4",
         file_blocks.append(
             f'<tr>'
             f'<td width="6%" align="center" valign="top"'
-            f'  style="padding-top:4px;"><b>{i}</b></td>'
-            f'<td width="94%" style="padding:3px 2px 5px 4px;">'
+            f'  style="padding:1px 0;"><b>{i}</b></td>'
+            f'<td width="94%" style="padding:1px 2px 2px 3px; line-height:100%;">'
             f'  <span style="font-size:{table_pt}pt; font-weight:bold;">{name}</span><br>'
             f'  <span style="color:{dim_color}; font-size:{dim_size}pt;">'
             f'    &#x1F4CF;&nbsp;{inches_str}</span><br>'
@@ -179,27 +179,30 @@ def build_token_html(token: dict, fmt: str = "a4",
     font-family: 'Segoe UI', 'Nirmala UI', Arial, sans-serif;
     color: #111111;
     font-size: {base}pt;
+    line-height: 100%;
     margin: 0; padding: 0;
   }}
   .appname {{ color: #555555; font-size: {sub}pt; }}
+  .user    {{ color: #333333; font-size: {sub}pt; }}
   .label   {{ color: #444444; }}
-  .foot    {{ color: #555555; font-size: {contact_pt}pt; }}
+  hr       {{ margin: 3px 0; }}
 </style>
 </head>
 <body>
 
-<table width="100%" cellspacing="0" cellpadding="2">
+<table width="100%" cellspacing="0" cellpadding="0">
   <tr>
     <td align="center">
       <div style="font-size:{title}pt; font-weight:bold; letter-spacing:2px;">TOKEN SLIP</div>
       <div class="appname">Image Measurement &amp; Report Tool</div>
+      <div class="user"><b>User:</b> {user_name}</div>
     </td>
   </tr>
 </table>
 
 <hr>
 
-<table width="100%" cellspacing="0" cellpadding="4">
+<table width="100%" cellspacing="0" cellpadding="1" style="line-height:100%;">
   <tr>
     <td width="36%" class="label"><b>Token No</b></td>
     <td><span style="font-size:{token_pt}pt; font-weight:bold;">{token_no}</span></td>
@@ -224,19 +227,12 @@ def build_token_html(token: dict, fmt: str = "a4",
 
 <hr>
 
-<div style="font-size:{sub}pt; font-weight:bold;">FILES</div>
-<br>
+<div style="font-size:{sub}pt; font-weight:bold; line-height:100%;">FILES</div>
 
 <table width="100%" cellspacing="0" cellpadding="0"
-       style="font-size:{table_pt}pt;">
+       style="font-size:{table_pt}pt; line-height:100%;">
   {rows_html}
 </table>
-
-<br>
-
-<div align="center" class="foot">
-  Please keep this token slip and bring it when collecting your files.
-</div>
 
 </body>
 </html>

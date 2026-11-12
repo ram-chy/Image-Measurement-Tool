@@ -1,6 +1,20 @@
 # Work log
 
+## v1.5.2 — 12 Nov 2026 — ✅ COMPLETE
+
+Token-slip refinements requested by the user:
+
+- Added the **user name** to the token-slip header (stored `created_by_name`).
+- Removed the footer note ("Please keep this token slip…").
+- Reduced slip fonts to an average of ~9 pt with minimal line spacing.
+- The item is now asked for the **paper size before generating** a token
+  (`PaperSizeDialog`); the chosen size is preselected in the preview/print
+  dialog.
+- Version bumped 1.5.1 → **1.5.2** in `image_analyzer\__init__.py`,
+  `version_info.txt`, `ImageMeasureTool_Setup.iss`, README.
+
 ## v1.5.1 — 11 Nov 2026 — ✅ COMPLETE
+
 
 User-requested corrections on top of v1.5.0:
 
