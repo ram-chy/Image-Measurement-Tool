@@ -103,6 +103,69 @@ def _extract_color_profile(img: Image.Image) -> str:
         return "None"
 
 
+def _to_float(value) -> float:
+    """Convert a rational/string/number to float (0.0 if invalid)."""
+    try:
+        if isinstance(value, tuple) and len(value) == 2:
+            return float(value[0]) / float(value[1]) if value[1] else 0.0
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _exif_dpi(img: Image.Image) -> tuple[float, float]:
+    try:
+        exif = img.getexif()
+    except Exception:
+        return 0.0, 0.0
+    if not exif:
+        return 0.0, 0.0
+    x = _to_float(exif.get(282))
+    y = _to_float(exif.get(283))
+    if exif.get(296) == 3:          # ResolutionUnit: 3 = centimetres
+        x *= 2.54
+        y *= 2.54
+    return x, y
+
+
+def _photoshop_dpi(img: Image.Image) -> tuple[float, float]:
+    """Read the ResolutionInfo block written by Photoshop."""
+    photoshop = img.info.get("photoshop")
+    if not isinstance(photoshop, dict):
+        return 0.0, 0.0
+    res = photoshop.get(0x03ED)     # 1005 = ResolutionInfo
+    if not isinstance(res, dict):
+        return 0.0, 0.0
+    x = _to_float(res.get("XResolution"))
+    y = _to_float(res.get("YResolution"))
+    if res.get("DisplayedUnitsX") == 2:   # centimetres
+        x *= 2.54
+    if res.get("DisplayedUnitsY") == 2:
+        y *= 2.54
+    return x, y
+
+
+def _extract_dpi(img: Image.Image) -> tuple[float, float]:
+    dpi = img.info.get("dpi")
+    if dpi:
+        try:
+            x, y = float(dpi[0]), float(dpi[1])
+            if x > 0 and y > 0:
+                return x, y
+        except (TypeError, ValueError, IndexError):
+            pass
+
+    x, y = _photoshop_dpi(img)
+    if x > 0 or y > 0:
+        return (x or y), (y or x)
+
+    x, y = _exif_dpi(img)
+    if x > 0 or y > 0:
+        return (x or y), (y or x)
+
+    return 72.0, 72.0
+
+
 def analyze_image(file_path: str) -> ImageInfo:
     """
     Analyze a single image file and return an ImageInfo dataclass.
@@ -129,30 +192,12 @@ def analyze_image(file_path: str) -> ImageInfo:
             info.color_profile = _extract_color_profile(img)
 
             # DPI
-            dpi = img.info.get("dpi")
-            if dpi:
-                info.dpi_x = round(float(dpi[0]), 2)
-                info.dpi_y = round(float(dpi[1]), 2)
-            else:
-                # Check EXIF for resolution
-                try:
-                    exif = img._getexif() if hasattr(img, "_getexif") else None
-                    if exif:
-                        # Tag 282 = XResolution, 283 = YResolution
-                        xres = exif.get(282)
-                        yres = exif.get(283)
-                        if xres:
-                            info.dpi_x = round(float(xres[0]) / float(xres[1]) if isinstance(xres, tuple) else float(xres), 2)
-                        if yres:
-                            info.dpi_y = round(float(yres[0]) / float(yres[1]) if isinstance(yres, tuple) else float(yres), 2)
-                except Exception:
-                    pass
-                if not info.dpi_x:
-                    info.dpi_x = 72.0
-                    info.dpi_y = 72.0
+            info.dpi_x, info.dpi_y = _extract_dpi(img)
+            info.dpi_x = round(info.dpi_x, 2)
+            info.dpi_y = round(info.dpi_y, 2)
 
             # Physical dimensions
-            if info.dpi_x > 0:
+            if info.dpi_x > 0 and info.dpi_y > 0:
                 info.width_inch = round(info.width_px / info.dpi_x, 3)
                 info.height_inch = round(info.height_px / info.dpi_y, 3)
                 info.width_mm = round(info.width_inch * 25.4, 2)

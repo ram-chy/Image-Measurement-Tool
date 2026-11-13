@@ -149,15 +149,12 @@ def build_token_html(token: dict, fmt: str = "a4",
         file_blocks.append(
             f'<tr>'
             f'<td width="6%" align="center" valign="top"'
-            f'  style="padding:1px 0;"><b>{i}</b></td>'
-            f'<td width="94%" style="padding:1px 2px 2px 3px; line-height:100%;">'
+            f'  style="padding:0;"><b>{i}</b></td>'
+            f'<td width="94%" style="padding:0 2px 0 3px; line-height:90%;">'
             f'  <span style="font-size:{table_pt}pt; font-weight:bold;">{name}</span><br>'
             f'  <span style="color:{dim_color}; font-size:{dim_size}pt;">'
-            f'    &#x1F4CF;&nbsp;{inches_str}</span><br>'
-            f'  <span style="color:{dim_color}; font-size:{dim_size}pt;">'
-            f'    &#x1F4D0;&nbsp;{feet_str}</span><br>'
-            f'  <span style="color:#666666; font-size:{max(dim_size-0.5,7)}pt;">'
-            f'    &#x1F3A8;&nbsp;{mode}</span>'
+            f'    &#x1F4CF;&nbsp;{inches_str} &nbsp;/&nbsp; {feet_str}'
+            f'    &nbsp;&nbsp;&#x1F3A8;&nbsp;{mode}</span>'
             f'</td>'
             f'</tr>'
             # thin separator between files
@@ -179,13 +176,13 @@ def build_token_html(token: dict, fmt: str = "a4",
     font-family: 'Segoe UI', 'Nirmala UI', Arial, sans-serif;
     color: #111111;
     font-size: {base}pt;
-    line-height: 100%;
+    line-height: 90%;
     margin: 0; padding: 0;
   }}
   .appname {{ color: #555555; font-size: {sub}pt; }}
   .user    {{ color: #333333; font-size: {sub}pt; }}
   .label   {{ color: #444444; }}
-  hr       {{ margin: 3px 0; }}
+  hr       {{ margin: 1px 0; }}
 </style>
 </head>
 <body>
@@ -202,7 +199,7 @@ def build_token_html(token: dict, fmt: str = "a4",
 
 <hr>
 
-<table width="100%" cellspacing="0" cellpadding="1" style="line-height:100%;">
+<table width="100%" cellspacing="0" cellpadding="0" style="line-height:90%;">
   <tr>
     <td width="36%" class="label"><b>Token No</b></td>
     <td><span style="font-size:{token_pt}pt; font-weight:bold;">{token_no}</span></td>
@@ -227,10 +224,10 @@ def build_token_html(token: dict, fmt: str = "a4",
 
 <hr>
 
-<div style="font-size:{sub}pt; font-weight:bold; line-height:100%;">FILES</div>
+<div style="font-size:{sub}pt; font-weight:bold; line-height:90%;">FILES</div>
 
 <table width="100%" cellspacing="0" cellpadding="0"
-       style="font-size:{table_pt}pt; line-height:100%;">
+       style="font-size:{table_pt}pt; line-height:90%;">
   {rows_html}
 </table>
 
