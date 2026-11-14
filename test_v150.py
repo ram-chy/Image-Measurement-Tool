@@ -360,6 +360,10 @@ def test_custom_paper_size():
     check("custom without width uses the thermal layout",
           build_token_html(token, "custom") == th)
 
+    # Fixed 80 x 165 mm slip uses the compact thermal layout.
+    slip = build_token_html(token, "slip80x165")
+    check("80 x 165 mm slip uses the thermal layout", slip == th)
+
     # Dialog behaviour.
     from image_analyzer.ui.token import TokenPreviewDialog
     from PyQt6.QtCore import QSizeF
@@ -371,6 +375,8 @@ def test_custom_paper_size():
               for i in range(dlg.cmb_format.count())]
     check("'Custom size' offered in the print-size dropdown",
           "Custom size" in labels, str(labels))
+    check("'80 × 165 mm' offered in the print-size dropdown",
+          "80 × 165 mm" in labels, str(labels))
     check("custom fields disabled while A4 is selected",
           not dlg.spn_custom_w.isEnabled() and not dlg.spn_custom_h.isEnabled())
 
@@ -390,6 +396,14 @@ def test_custom_paper_size():
           dlg._html_kwargs() == {"custom_width_mm": 100.0})
     check("preview rendered for custom size",
           "TKN-000009" in dlg.browser.toPlainText())
+
+    dlg.cmb_format.setCurrentIndex(dlg.cmb_format.findData("slip80x165"))
+    slip_mm = dlg._page_size().size(QPageSize.Unit.Millimeter)
+    check("80 x 165 mm preset sets the page size",
+          abs(slip_mm.width() - 80.0) < 0.01 and
+          abs(slip_mm.height() - 165.0) < 0.01, str(slip_mm))
+
+    dlg.cmb_format.setCurrentIndex(dlg.cmb_format.findData("custom"))
 
     # Page setup on a PDF printer: exact page + margins (12 mm when wide).
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)

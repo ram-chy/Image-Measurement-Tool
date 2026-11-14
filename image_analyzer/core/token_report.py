@@ -96,9 +96,10 @@ def build_token_html(token: dict, fmt: str = "a4",
     """
     Build the printable token slip.
 
-    fmt: "a4" | "a5" | "thermal" | "custom"
+    fmt: "a4" | "a5" | "thermal" | "slip80x165" | "custom"
     For "custom", `custom_width_mm` picks the closest hand-tuned layout for
     the paper width (>=170 mm → A4, >=100 mm → A5, narrower → thermal).
+    "slip80x165" is a fixed 80 mm wide × 165 mm tall slip (thermal layout).
     token keys used: token_no, created_at, customer_name, customer_mobile,
                      created_by_name, file_count, files
     files: [{"file_name": ..., "color_mode": ...,
@@ -126,14 +127,14 @@ def build_token_html(token: dict, fmt: str = "a4",
         else:
             fmt = "thermal"
 
-    if fmt == "thermal":
+    if fmt in ("thermal", "slip80x165"):
         base, title, sub, token_pt, table_pt = 8, 13, 7.5, 9.5, 8
     elif fmt == "a5":
         base, title, sub, token_pt, table_pt = 9, 14, 8, 10.5, 9
     else:  # a4
         base, title, sub, token_pt, table_pt = 9, 15, 8.5, 11, 9
 
-    is_thermal = fmt == "thermal"
+    is_thermal = fmt in ("thermal", "slip80x165")
 
     # ── Build one block per file (stacked, narrow-slip friendly) ─────────────
     file_blocks = []

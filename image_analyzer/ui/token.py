@@ -69,6 +69,7 @@ def _format_choices() -> list[tuple[str, str]]:
         ("A4 page", "a4"),
         ("A5 page", "a5"),
         ("80 mm Thermal", "thermal"),
+        ("80 × 165 mm", "slip80x165"),
         ("Custom size", "custom"),
     ]
 
@@ -847,6 +848,13 @@ class TokenPreviewDialog(QDialog):
             )
         if fmt == "a5":
             return QPageSize(QPageSize.PageSizeId.A5)
+        if fmt == "slip80x165":
+            return QPageSize(
+                QSizeF(80.0, 165.0),
+                QPageSize.Unit.Millimeter,
+                "Slip80x165",
+                QPageSize.SizeMatchPolicy.ExactMatch,
+            )
         if fmt == "thermal":
             return QPageSize(
                 QSizeF(80.0, self._thermal_height_mm()),
@@ -868,7 +876,7 @@ class TokenPreviewDialog(QDialog):
     def _apply_page_setup(self, printer: QPrinter):
         printer.setPageSize(self._page_size())
         fmt = self._fmt()
-        narrow = fmt == "thermal" or (
+        narrow = fmt in ("thermal", "slip80x165") or (
             fmt == "custom" and self.spn_custom_w.value() < 100.0
         )
         margin = 3.0 if narrow else 12.0
