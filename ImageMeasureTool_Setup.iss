@@ -5,7 +5,7 @@
 ; ============================================================
 
 #define AppName      "Image Measurement Tool"
-#define AppVersion   "1.5.2"
+#define AppVersion   "1.5.3"
 #define AppPublisher "Image Tool"
 #define AppExeName   "ImageMeasureTool.exe"
 

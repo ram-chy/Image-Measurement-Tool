@@ -1,5 +1,19 @@
 # Work log
 
+## v1.5.3 — 21 Nov 2026 — ✅ COMPLETE
+
+Customer management and token notes:
+
+- Added a **Customers** toolbar action with add/edit/delete dialogs
+  (`image_analyzer\ui\customer.py`).
+- Token window now uses a **customer dropdown** with autocomplete and a name
+  match hint; existing customers are filled from the saved list.
+- Added an optional **Note** field to the move form. It is stored with the token
+  and printed in the slip footer by `build_token_html()`.
+- `tokens` table gained a `note` column with a migration for existing databases.
+- Version bumped 1.5.2 → **1.5.3** in `image_analyzer\__init__.py`,
+  `version_info.txt`, `ImageMeasureTool_Setup.iss`, README and tests.
+
 ## v1.5.2 — 12 Nov 2026 — ✅ COMPLETE
 
 Token-slip refinements requested by the user:

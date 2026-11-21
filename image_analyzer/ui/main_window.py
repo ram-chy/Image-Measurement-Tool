@@ -40,6 +40,7 @@ from image_analyzer.core.database import (
 )
 from image_analyzer.ui.preview import ImagePreviewDialog
 from image_analyzer.ui.login import UserManagementDialog
+from image_analyzer.ui.customer import CustomerManagementDialog
 from image_analyzer.ui.token import TokenWindow
 from image_analyzer.ui.backup import BackupDialog
 from image_analyzer.core.backup import maybe_run_daily_backup
@@ -617,6 +618,11 @@ class MainWindow(QMainWindow):
         )
         self.btn_backup.clicked.connect(self._show_backup)
 
+        self.btn_customers = QPushButton("🧑  Customers")
+        self.btn_customers.setObjectName("BtnSecondary")
+        self.btn_customers.setToolTip("Add, edit or delete saved customers")
+        self.btn_customers.clicked.connect(self._manage_customers)
+
         self.btn_users = None
         if self.current_user.get("is_admin"):
             self.btn_users = QPushButton("👥  Users")
@@ -637,6 +643,7 @@ class MainWindow(QMainWindow):
         h.addWidget(self.btn_clear)
         h.addWidget(self.btn_history)
         h.addWidget(self.btn_backup)
+        h.addWidget(self.btn_customers)
         if self.btn_users:
             h.addWidget(self.btn_users)
         h.addStretch()
@@ -661,6 +668,8 @@ class MainWindow(QMainWindow):
         return tbl
 
     def _make_dest_row(self):
+        box = QVBoxLayout(); box.setSpacing(6)
+
         h = QHBoxLayout(); h.setSpacing(8)
 
         lbl_item = QLabel("🏷️  Item name:")
@@ -688,7 +697,25 @@ class MainWindow(QMainWindow):
         btn = QPushButton("Browse…"); btn.setObjectName("BtnSecondary")
         btn.setFixedHeight(38); btn.clicked.connect(self._browse_dest)
         h.addWidget(btn)
-        return h
+        box.addLayout(h)
+
+        note_row = QHBoxLayout(); note_row.setSpacing(8)
+        lbl_note = QLabel("📝  Note:")
+        lbl_note.setStyleSheet("font-size:14pt; font-weight:bold;")
+        note_row.addWidget(lbl_note)
+        self.note_edit = QLineEdit()
+        self.note_edit.setPlaceholderText(
+            "Optional note — printed at the bottom of the token slip"
+        )
+        self.note_edit.setToolTip(
+            "Optional note printed in the footer of the token slip. "
+            "Leave it empty to keep the footer blank."
+        )
+        self.note_edit.setFixedHeight(38)
+        self.note_edit.setMinimumWidth(210)
+        note_row.addWidget(self.note_edit, stretch=1)
+        box.addLayout(note_row)
+        return box
 
     def _make_actions(self):
         box = QVBoxLayout(); box.setSpacing(6)
@@ -941,6 +968,12 @@ class MainWindow(QMainWindow):
         dlg = UserManagementDialog(self.current_user, self)
         dlg.exec()
 
+    def _manage_customers(self):
+        dlg = CustomerManagementDialog(self)
+        dlg.exec()
+        if self._token_window is not None:
+            self._token_window.refresh_customers()
+
     def _open_token_window(self):
         """Show the separate Token Generation window (keeps its file list)."""
         if self._token_window is None:
@@ -1089,6 +1122,7 @@ class MainWindow(QMainWindow):
                 "No successfully analysed files."); return
 
         item = self.item_edit.text().strip()
+        note = self.note_edit.text().strip()
         prefix = _clean_item_name(item)
         if not prefix:
             reply = QMessageBox.question(
@@ -1243,10 +1277,13 @@ class MainWindow(QMainWindow):
             self._open_token_window()
             if moved_entries:
                 self._token_window.add_files(
-                    moved_entries, item=prefix,
+                    moved_entries, item=prefix, note=note,
                     session_id=self._session_id,
                 )
             self._clear()
+            self.item_edit.clear()
+            self.note_edit.clear()
+            self.dest_edit.clear()
             self._status(
                 f"✔ {len(moved_entries)} renamed file(s) sent to Token Generation.  "
                 "Analysis list cleared — add the next batch."

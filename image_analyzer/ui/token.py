@@ -11,14 +11,14 @@ slips can be re-opened, printed or exported again.
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QMarginsF, QSizeF
+from PyQt6.QtCore import Qt, QMarginsF, QSizeF, QStringListModel
 from PyQt6.QtGui import QPageLayout, QPageSize, QTextDocument
 from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit,
     QComboBox, QPushButton, QMessageBox, QTextBrowser, QFileDialog, QFrame,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QCheckBox, QGroupBox, QDoubleSpinBox,
+    QCheckBox, QGroupBox, QDoubleSpinBox, QCompleter,
 )
 
 from image_analyzer.core.database import (
@@ -188,8 +188,10 @@ class TokenWindow(QDialog):
         }
         self._entries: list[dict] = []
         self._customers: list[dict] = []
+        self._name_labels = {}
         self._session_id: int | None = None
         self._current_item = ""
+        self._current_note = ""
         self._building = False
 
         self.setWindowTitle("🏷️  Token Generation")
@@ -240,10 +242,26 @@ class TokenWindow(QDialog):
         self.cmb_customer.currentIndexChanged.connect(self._pick_customer)
         form.addRow("Existing customer:", self.cmb_customer)
 
+        name_box = QVBoxLayout(); name_box.setSpacing(2)
         self.ed_name = QLineEdit()
-        self.ed_name.setPlaceholderText("Customer name")
+        self.ed_name.setPlaceholderText("Type a customer name to search saved customers")
         self.ed_name.setFixedHeight(40)
-        form.addRow("Customer name:", self.ed_name)
+        self.name_completer = QCompleter(self)
+        self.name_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.name_completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self.name_completer.setCompletionMode(
+            QCompleter.CompletionMode.PopupCompletion)
+
+        self.name_completer.activated.connect(self._apply_name_suggestion)
+        self.ed_name.setCompleter(self.name_completer)
+        self.ed_name.textChanged.connect(self._check_name_matches)
+        name_box.addWidget(self.ed_name)
+
+        self.lbl_name_match = QLabel("")
+        self.lbl_name_match.setWordWrap(True)
+        self.lbl_name_match.setStyleSheet(f"color:{C_SUBTEXT}; font-size:14pt;")
+        name_box.addWidget(self.lbl_name_match)
+        form.addRow("Customer name:", name_box)
 
         self.ed_mobile = QLineEdit()
         self.ed_mobile.setPlaceholderText("Mobile number")
@@ -340,14 +358,67 @@ class TokenWindow(QDialog):
         current = self.cmb_customer.currentData()
         self.cmb_customer.clear()
         self.cmb_customer.addItem("— New customer —", None)
+        self._name_labels = {}
+        labels = []
         for c in self._customers:
             label = f"{c['name']}  —  {c['mobile']}"
             self.cmb_customer.addItem(label, c["id"])
+            labels.append(label)
+            self._name_labels[label] = c
         if current is not None:
             idx = self.cmb_customer.findData(current)
             if idx >= 0:
                 self.cmb_customer.setCurrentIndex(idx)
         self.cmb_customer.blockSignals(False)
+        self.name_completer.setModel(QStringListModel(labels, self))
+        self._check_name_matches()
+
+    def _check_name_matches(self, *_args):
+        """Show saved customers matching the name currently being typed."""
+        typed = self.ed_name.text().strip().casefold()
+        if len(typed) < 2:
+            self.lbl_name_match.setText("")
+            return
+        matches = [c for c in self._customers
+                   if typed in (c["name"] or "").casefold()]
+        if not matches:
+            self.lbl_name_match.setStyleSheet(
+                f"color:{C_SUBTEXT}; font-size:14pt;")
+            self.lbl_name_match.setText(
+                "No saved customer found — this name will be saved with the token.")
+            return
+        if len(matches) == 1:
+            c = matches[0]
+            self.lbl_name_match.setStyleSheet(
+                f"color:{C_SUCCESS}; font-size:14pt;")
+            self.lbl_name_match.setText(
+                f"✔ Found saved customer: {c['name']} — {c['mobile']}")
+            return
+        self.lbl_name_match.setStyleSheet(
+            f"color:{C_SUCCESS}; font-size:14pt;")
+        self.lbl_name_match.setText(
+            f"✔ {len(matches)} saved customers match — pick one from the suggestions.")
+
+    def _apply_name_suggestion(self, label: str):
+        """Fill the name/mobile fields when a suggestion is chosen."""
+        customer = self._name_labels.get(label)
+        if not customer:
+            return
+        self.ed_name.blockSignals(True)
+        self.ed_name.setText(customer["name"])
+        self.ed_name.blockSignals(False)
+        self.ed_mobile.setText(customer["mobile"])
+        idx = self.cmb_customer.findData(customer["id"])
+        if idx >= 0:
+            self.cmb_customer.setCurrentIndex(idx)
+        self._check_name_matches()
+
+    def refresh_customers(self):
+        """Reload the list and re-apply details after a customer was edited."""
+        selected = self.cmb_customer.currentData()
+        self._reload_customers()
+        if selected is not None:
+            self._pick_customer(self.cmb_customer.currentIndex())
 
     def _pick_customer(self, _index: int):
         cid = self.cmb_customer.currentData()
@@ -359,13 +430,14 @@ class TokenWindow(QDialog):
             self.ed_mobile.setText(customer["mobile"])
 
     # ── Files ─────────────────────────────────────────────────────────────────
-    def add_files(self, entries: list[dict], item: str = "",
+    def add_files(self, entries: list[dict], item: str = "", note: str = "",
                   session_id: int | None = None, show: bool = True):
         """
         Append moved files to this window.
 
         `entries` items must provide file_name, width_inch, height_inch and
         color_mode (moved_to is optional but used to avoid duplicates).
+        `note` is printed in the token footer (blank when none is given).
         """
         existing = {_entry_key(e) for e in self._entries}
         added = 0
@@ -389,6 +461,7 @@ class TokenWindow(QDialog):
 
         # The latest moved batch determines the Item stored with the token.
         self._current_item = (item or "").strip()
+        self._current_note = (note or "").strip()
 
         self._refresh_table()
 
@@ -556,6 +629,7 @@ class TokenWindow(QDialog):
         fmt, custom_w, custom_h = paper
 
         item = self._current_item
+        note = self._current_note
 
         files = [
             {
@@ -571,7 +645,7 @@ class TokenWindow(QDialog):
             token = create_token(
                 self._session_id, name, mobile,
                 self.user.get("id"), self.user.get("display_name", ""),
-                files, item=item,
+                files, item=item, note=note,
             )
         except Exception as exc:
             QMessageBox.critical(self, "Token Failed",

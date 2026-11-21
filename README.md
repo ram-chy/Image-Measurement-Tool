@@ -25,6 +25,10 @@ Highlights:
   **width × height in feet and inches**, and colour modes — printable on
   **A4, A5, 80 mm thermal paper, or a custom size** (width × height in mm),
   or saved as PDF.
+- **Customers:** add, edit and delete saved customers from the toolbar; the Token
+  window suggests matching customers as you type their name.
+- **Optional note:** enter a note before moving files; it is saved with the token
+  and printed at the bottom of the slip.
 - **Token records:** every generated token is stored in the database (with its
   Item name) and can be re-opened, printed or exported later from
   **Token Records**.
@@ -43,7 +47,7 @@ Highlights:
 
 ## Install (end users)
 
-Run **`installer/ImageMeasureTool_Setup_v1.5.2.exe`** and follow the wizard.
+Run **`installer/ImageMeasureTool_Setup_v1.5.3.exe`** and follow the wizard.
 
 - Installs to `C:\Program Files\Image Measurement Tool`
 - Start Menu shortcut (and optional Desktop shortcut)
@@ -82,7 +86,7 @@ powershell -ExecutionPolicy Bypass -File .\build_installer.ps1
 ```
 
 The script builds `dist\ImageMeasureTool.exe` (PyInstaller, one-file, no console)
-and then compiles `installer\ImageMeasureTool_Setup_v1.5.2.exe`.
+and then compiles `installer\ImageMeasureTool_Setup_v1.5.3.exe`.
 
 ## Project layout
 

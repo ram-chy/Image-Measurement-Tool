@@ -165,11 +165,14 @@ def init_db():
                 created_at      TEXT NOT NULL,
                 file_count      INTEGER NOT NULL DEFAULT 0,
                 files_json      TEXT NOT NULL DEFAULT '[]',
-                item            TEXT NOT NULL DEFAULT ''
+                item            TEXT NOT NULL DEFAULT '',
+                note            TEXT NOT NULL DEFAULT ''
             )
         """)
         if not _column_exists(con, "tokens", "item"):
             con.execute("ALTER TABLE tokens ADD COLUMN item TEXT NOT NULL DEFAULT ''")
+        if not _column_exists(con, "tokens", "note"):
+            con.execute("ALTER TABLE tokens ADD COLUMN note TEXT NOT NULL DEFAULT ''")
         con.execute("""
             CREATE INDEX IF NOT EXISTS idx_tokens_created ON tokens (created_at)
         """)
@@ -471,6 +474,82 @@ def fetch_customers() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_customer(customer_id: int) -> dict | None:
+    init_db()
+    with get_connection() as con:
+        row = con.execute(
+            "SELECT * FROM customers WHERE id=?", (customer_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def _validate_customer(name: str, mobile: str) -> tuple[str, str]:
+    name = (name or "").strip()
+    mobile = (mobile or "").strip()
+    digits = "".join(ch for ch in mobile if ch.isdigit())
+    if len(name) < 2:
+        raise ValueError("Enter a customer name (at least 2 characters).")
+    if len(digits) < 6:
+        raise ValueError("Enter a valid mobile number (at least 6 digits).")
+    return name, mobile
+
+
+def _check_mobile_available(con, mobile: str, exclude_id: int | None = None):
+    sql = "SELECT id FROM customers WHERE mobile=?"
+    params = (mobile,)
+    if exclude_id is not None:
+        sql += " AND id<>?"
+        params = (mobile, exclude_id)
+    if con.execute(sql, params).fetchone():
+        raise ValueError(f"A customer with mobile {mobile} already exists.")
+
+
+def create_customer(name: str, mobile: str, item: str = "") -> int:
+    """Add a customer explicitly (raises ValueError on invalid/duplicate data)."""
+    init_db()
+    name, mobile = _validate_customer(name, mobile)
+    with get_connection() as con:
+        _check_mobile_available(con, mobile)
+        cur = con.execute(
+            "INSERT INTO customers (name, mobile, item, created_at) VALUES (?,?,?,?)",
+            (name, mobile, (item or "").strip(),
+             datetime.now().isoformat(sep=" ", timespec="seconds")),
+        )
+        con.commit()
+        return cur.lastrowid
+
+
+def update_customer(customer_id: int, name: str, mobile: str,
+                    item: str = "") -> dict:
+    """Update an existing customer by id (raises ValueError if missing/invalid)."""
+    init_db()
+    name, mobile = _validate_customer(name, mobile)
+    with get_connection() as con:
+        if not con.execute(
+            "SELECT 1 FROM customers WHERE id=?", (customer_id,)
+        ).fetchone():
+            raise ValueError("That customer no longer exists.")
+        _check_mobile_available(con, mobile, exclude_id=customer_id)
+        con.execute(
+            "UPDATE customers SET name=?, mobile=?, item=? WHERE id=?",
+            (name, mobile, (item or "").strip(), customer_id),
+        )
+        con.commit()
+    return get_customer(customer_id)
+
+
+def delete_customer(customer_id: int):
+    """Delete a customer; token slips keep their own name/mobile snapshot."""
+    init_db()
+    with get_connection() as con:
+        con.execute(
+            "UPDATE tokens SET customer_id=NULL WHERE customer_id=?",
+            (customer_id,),
+        )
+        con.execute("DELETE FROM customers WHERE id=?", (customer_id,))
+        con.commit()
+
+
 def _upsert_customer(con, name: str, mobile: str, item: str = "") -> int:
     now = datetime.now().isoformat(sep=" ", timespec="seconds")
     row = con.execute(
@@ -514,17 +593,19 @@ def _next_token_no(con) -> str:
 
 def create_token(session_id: int | None, customer_name: str, customer_mobile: str,
                  created_by_id: int | None, created_by_name: str,
-                 files: list[dict], item: str = "") -> dict:
+                 files: list[dict], item: str = "", note: str = "") -> dict:
     """
     Save a token slip and return its full snapshot.
 
     `files` is a list of {"file_name": ..., "color_mode": ...} dicts.
     `item` is the job/item name that prefixes the moved file names.
+    `note` is an optional free-text note printed in the token footer.
     """
     init_db()
     now = datetime.now().isoformat(sep=" ", timespec="seconds")
     files_json = json.dumps(files, ensure_ascii=False)
     item = (item or "").strip()
+    note = (note or "").strip()
 
     with get_connection() as con:
         customer_id = _upsert_customer(con, customer_name.strip(),
@@ -534,11 +615,11 @@ def create_token(session_id: int | None, customer_name: str, customer_mobile: st
             "INSERT INTO tokens "
             "(token_no, session_id, customer_id, customer_name, customer_mobile, "
             " created_by_id, created_by_name, created_at, file_count, files_json, "
-            " item) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            " item, note) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (token_no, session_id, customer_id, customer_name.strip(),
              customer_mobile.strip(), created_by_id, created_by_name,
-             now, len(files), files_json, item),
+             now, len(files), files_json, item, note),
         )
         con.commit()
         token_id = cur.lastrowid
@@ -556,6 +637,7 @@ def create_token(session_id: int | None, customer_name: str, customer_mobile: st
         "file_count": len(files),
         "files": files,
         "item": item,
+        "note": note,
     }
 
 

@@ -98,7 +98,7 @@ class NoButtons:
 # ══════════════════════════════════════════════════════════════════════════════
 def test_version_and_naming_helpers():
     section("Version + rename helpers (Requirement 3)")
-    check("package version is 1.5.2", __version__ == "1.5.2", __version__)
+    check("package version is 1.5.3", __version__ == "1.5.3", __version__)
 
     check("IMG_001.jpg + Sharma-House -> Sharma-House_IMG_001.jpg",
           _apply_item_prefix("IMG_001.jpg", "Sharma-House") ==
@@ -133,6 +133,7 @@ def test_token_html():
         "created_at": "2026-11-11 10:30:00",
         "customer_name": "Ravi Kumar",
         "customer_mobile": "9876543210",
+        "note": "Handle with care",
         "file_count": 2,
         "files": [
             {"file_name": "Sharma-House.jpg", "color_mode": "RGB",
@@ -153,6 +154,11 @@ def test_token_html():
         check(f"[{fmt}] inches + decimal feet shown (24in -> 2.0 ft)",
               "24.0" in html and "2.0 ft" in html and "18.0" in html)
         check(f"[{fmt}] colour modes shown", "RGB" in html and "CMYK" in html)
+        check(f"[{fmt}] note printed in the footer", "Handle with care" in html)
+
+    no_note = dict(token, note="")
+    check("empty note omits the footer",
+          "<b>Note</b>" not in build_token_html(no_note))
 
 
 def test_token_window():
@@ -175,14 +181,16 @@ def test_token_window():
         {"file_name": "Sharma-House_1.jpg", "color_mode": "CMYK",
          "width_inch": 12, "height_inch": 6, "moved_to": "d/Sharma-House_1.jpg"},
     ]
-    w.add_files(entries, item="Sharma-House", session_id=7, show=False)
+    w.add_files(entries, item="Sharma-House", note="Handle with care",
+                session_id=7, show=False)
     check("both files appended", len(w._entries) == 2)
     check("hidden item stored from the move batch",
           w._current_item == "Sharma-House")
     check("session id stored", w._session_id == 7)
     check("table shows both rows", w.tbl.rowCount() == 2)
 
-    w.add_files(entries, item="Sharma-House", show=False)
+    w.add_files(entries, item="Sharma-House", note="Handle with care",
+                show=False)
     check("duplicate files are skipped", len(w._entries) == 2)
 
     # Token generation stores the hidden item and selected files.
@@ -202,6 +210,8 @@ def test_token_window():
     check("token record keeps the item", t.get("item") == "Sharma-House",
           str(t.get("item")))
     check("token record keeps 2 files", t.get("file_count") == 2)
+    check("token record keeps the note",
+          t.get("note") == "Handle with care", str(t.get("note")))
     check("generated files leave the window", len(w._entries) == 0)
     check("customer saved for reuse",
           any(c["name"] == "Ravi Kumar" for c in fetch_customers()))
@@ -224,6 +234,26 @@ def test_token_window():
     check("item name never appears in the customer dropdown",
           "TopSecret-Item" not in combo_text, combo_text)
     w.close()
+
+
+def test_customer_management():
+    section("Customer management")
+    from image_analyzer.core.database import (
+        create_customer, delete_customer, get_customer,
+    )
+    from image_analyzer.ui.customer import CustomerManagementDialog
+
+    cid = create_customer("Asha Rao", "9123456789", "Site-A")
+    dlg = CustomerManagementDialog()
+    check("customer dialog constructs offscreen", True)
+    names = [dlg.tbl.item(row, 0).text()
+             for row in range(dlg.tbl.rowCount())
+             if dlg.tbl.item(row, 0) is not None]
+    check("saved customer is listed", "Asha Rao" in names, str(names))
+    check("customer lookup works",
+          (get_customer(cid) or {}).get("name") == "Asha Rao")
+    delete_customer(cid)
+    check("customer deleted", get_customer(cid) is None)
 
 
 def test_backup_core():
@@ -425,7 +455,8 @@ def test_custom_paper_size():
     check("narrow custom paper gets thermal margins",
           abs(m2.left() - 3.0) < 0.01, str(m2))
     check("narrow custom width switches the slip layout",
-          "font-size:13pt" in dlg.browser.toHtml())
+          "FLEX MANIA" in dlg.browser.toHtml() and
+          "font-size:7.5pt" in dlg.browser.toHtml())
 
     dlg.cmb_format.setCurrentIndex(dlg.cmb_format.findData("a4"))
     check("switching back to A4 disables custom fields",
@@ -469,6 +500,7 @@ def test_full_move_flow():
     dest = TMP / "moved"
     mw.dest_edit.setText(str(dest))
     mw.item_edit.setText("Sharma-House")
+    mw.note_edit.setText("Rush order")
     session_id = mw._session_id      # _clear() resets this after the move
 
     with mock.patch.object(mw_mod, "QMessageBox", NoButtons):
@@ -492,6 +524,8 @@ def test_full_move_flow():
           tw is not None and tw._current_item == "Sharma-House")
     check("token window linked to the session",
           tw is not None and tw._session_id == session_id)
+    check("token window received the note",
+          tw is not None and tw._current_note == "Rush order")
 
     rows = fetch_records_for_session(session_id)
     check("database records updated with new names",
@@ -510,6 +544,9 @@ def test_full_move_flow():
     r3 = analyze_multiple([str(p3)])
     mw._results = r3
     mw._file_paths = [str(p3)]
+    mw.dest_edit.setText(str(dest))
+    mw.item_edit.setText("Sharma-House")
+    mw.note_edit.setText("Rush order")
     mw.btn_move.setEnabled(True)
     with mock.patch.object(mw_mod, "QMessageBox", NoButtons):
         mw._move_files()
@@ -528,6 +565,7 @@ def main():
         test_token_html()
         init_db()
         test_token_window()
+        test_customer_management()
         test_backup_core()
         test_backup_dialog()
         test_custom_paper_size()
