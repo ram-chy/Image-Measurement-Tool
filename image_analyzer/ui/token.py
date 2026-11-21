@@ -11,8 +11,10 @@ slips can be re-opened, printed or exported again.
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QMarginsF, QSizeF, QStringListModel
-from PyQt6.QtGui import QPageLayout, QPageSize, QTextDocument
+from PyQt6.QtCore import Qt, QMarginsF, QSizeF, QModelIndex
+from PyQt6.QtGui import (
+    QPageLayout, QPageSize, QTextDocument, QStandardItem, QStandardItemModel,
+)
 from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit,
@@ -34,6 +36,18 @@ C_BORDER  = "#E0E0E0"
 C_TEXT    = "#212121"
 C_SUBTEXT = "#757575"
 C_ERROR   = "#C62828"
+
+
+class _CustomerNameModel(QStandardItemModel):
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if not index.isValid():
+            return None
+        if role == Qt.ItemDataRole.DisplayRole:
+            return super().data(index, Qt.ItemDataRole.UserRole + 2)
+        if role == Qt.ItemDataRole.EditRole:
+            return super().data(index, Qt.ItemDataRole.UserRole + 1)
+        return super().data(index, role)
+
 
 _TICKET_QSS = f"""
     QDialog {{ background:{C_BG}; color:{C_TEXT}; }}
@@ -188,7 +202,6 @@ class TokenWindow(QDialog):
         }
         self._entries: list[dict] = []
         self._customers: list[dict] = []
-        self._name_labels = {}
         self._session_id: int | None = None
         self._current_item = ""
         self._current_note = ""
@@ -252,7 +265,9 @@ class TokenWindow(QDialog):
         self.name_completer.setCompletionMode(
             QCompleter.CompletionMode.PopupCompletion)
 
-        self.name_completer.activated.connect(self._apply_name_suggestion)
+        self.name_completer.activated[QModelIndex].connect(
+            self._apply_name_suggestion
+        )
         self.ed_name.setCompleter(self.name_completer)
         self.ed_name.textChanged.connect(self._check_name_matches)
         name_box.addWidget(self.ed_name)
@@ -358,19 +373,21 @@ class TokenWindow(QDialog):
         current = self.cmb_customer.currentData()
         self.cmb_customer.clear()
         self.cmb_customer.addItem("— New customer —", None)
-        self._name_labels = {}
-        labels = []
+        name_model = _CustomerNameModel(self)
         for c in self._customers:
             label = f"{c['name']}  —  {c['mobile']}"
             self.cmb_customer.addItem(label, c["id"])
-            labels.append(label)
-            self._name_labels[label] = c
+            item = QStandardItem()
+            item.setData(c["id"], Qt.ItemDataRole.UserRole)
+            item.setData(c["name"], Qt.ItemDataRole.UserRole + 1)
+            item.setData(label, Qt.ItemDataRole.UserRole + 2)
+            name_model.appendRow(item)
         if current is not None:
             idx = self.cmb_customer.findData(current)
             if idx >= 0:
                 self.cmb_customer.setCurrentIndex(idx)
         self.cmb_customer.blockSignals(False)
-        self.name_completer.setModel(QStringListModel(labels, self))
+        self.name_completer.setModel(name_model)
         self._check_name_matches()
 
     def _check_name_matches(self, *_args):
@@ -399,9 +416,10 @@ class TokenWindow(QDialog):
         self.lbl_name_match.setText(
             f"✔ {len(matches)} saved customers match — pick one from the suggestions.")
 
-    def _apply_name_suggestion(self, label: str):
+    def _apply_name_suggestion(self, index: QModelIndex):
         """Fill the name/mobile fields when a suggestion is chosen."""
-        customer = self._name_labels.get(label)
+        cid = index.data(Qt.ItemDataRole.UserRole)
+        customer = next((c for c in self._customers if c["id"] == cid), None)
         if not customer:
             return
         self.ed_name.blockSignals(True)

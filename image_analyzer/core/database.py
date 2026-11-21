@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import shutil
 import sqlite3
@@ -54,6 +55,42 @@ def get_connection() -> sqlite3.Connection:
 def _column_exists(con, table: str, column: str) -> bool:
     rows = con.execute(f"PRAGMA table_info({table})").fetchall()
     return any(r["name"] == column for r in rows)
+
+
+def _strip_mobile_suffix(name: str, mobile: str) -> str:
+    """Remove trailing ``— <mobile>`` copies appended by the old completer."""
+    name = (name or "").strip()
+    digits = "".join(ch for ch in (mobile or "") if ch.isdigit())
+    if not name or len(digits) < 6:
+        return name
+    parts = re.split(r"\s*[—–]\s*", name)
+    while len(parts) > 1:
+        if "".join(ch for ch in parts[-1] if ch.isdigit()) != digits:
+            break
+        parts.pop()
+    return " — ".join(parts).strip()
+
+
+def _clean_mobile_repeats(con):
+    """One-off data repair: names must hold only the customer's name."""
+    for table, name_col, mobile_col in (
+        ("customers", "name", "mobile"),
+        ("tokens", "customer_name", "customer_mobile"),
+    ):
+        if not _column_exists(con, table, name_col):
+            continue
+        rows = con.execute(
+            f"SELECT rowid AS rid, {name_col} AS nm, {mobile_col} AS mob "
+            f"FROM {table} WHERE {name_col} LIKE '%—%' "
+            f"OR {name_col} LIKE '%–%'"
+        ).fetchall()
+        for row in rows:
+            clean = _strip_mobile_suffix(row["nm"], row["mob"])
+            if clean and clean != row["nm"]:
+                con.execute(
+                    f"UPDATE {table} SET {name_col}=? WHERE rowid=?",
+                    (clean, row["rid"]),
+                )
 
 
 def init_db():
@@ -176,6 +213,7 @@ def init_db():
         con.execute("""
             CREATE INDEX IF NOT EXISTS idx_tokens_created ON tokens (created_at)
         """)
+        _clean_mobile_repeats(con)
         con.commit()
 
 
@@ -486,6 +524,7 @@ def get_customer(customer_id: int) -> dict | None:
 def _validate_customer(name: str, mobile: str) -> tuple[str, str]:
     name = (name or "").strip()
     mobile = (mobile or "").strip()
+    name = _strip_mobile_suffix(name, mobile)
     digits = "".join(ch for ch in mobile if ch.isdigit())
     if len(name) < 2:
         raise ValueError("Enter a customer name (at least 2 characters).")
@@ -552,6 +591,7 @@ def delete_customer(customer_id: int):
 
 def _upsert_customer(con, name: str, mobile: str, item: str = "") -> int:
     now = datetime.now().isoformat(sep=" ", timespec="seconds")
+    name = _strip_mobile_suffix(name, mobile)
     row = con.execute(
         "SELECT id, item FROM customers WHERE mobile=?", (mobile,)
     ).fetchone()
@@ -606,6 +646,7 @@ def create_token(session_id: int | None, customer_name: str, customer_mobile: st
     files_json = json.dumps(files, ensure_ascii=False)
     item = (item or "").strip()
     note = (note or "").strip()
+    customer_name = _strip_mobile_suffix(customer_name, customer_mobile)
 
     with get_connection() as con:
         customer_id = _upsert_customer(con, customer_name.strip(),

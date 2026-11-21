@@ -256,6 +256,76 @@ def test_customer_management():
     check("customer deleted", get_customer(cid) is None)
 
 
+def test_no_mobile_repeat():
+    section("Customer names never repeat the mobile")
+    from image_analyzer.core.database import (
+        _strip_mobile_suffix, create_customer, get_customer,
+    )
+
+    mobile = "+91 91237 54092"
+    check("plain name unchanged",
+          _strip_mobile_suffix("Ram Chowdhury", mobile) == "Ram Chowdhury")
+    check("single suffix removed",
+          _strip_mobile_suffix(f"Ram  —  {mobile}", mobile) == "Ram")
+    check("repeated suffixes removed",
+          _strip_mobile_suffix(
+              f"Ram  —  {mobile}  —  {mobile}  —  {mobile}", mobile) == "Ram")
+    check("different mobile formatting removed",
+          _strip_mobile_suffix("Ram — +91 91237 54092", "919123754092") == "Ram")
+    check("unrelated dash text kept",
+          _strip_mobile_suffix("Ram — Site A", mobile) == "Ram — Site A")
+
+    cid = create_customer(f"Bad Name  —  {mobile}", mobile)
+    check("create_customer strips the mobile",
+          get_customer(cid)["name"] == "Bad Name", str(get_customer(cid)))
+
+    corrupt_id = create_customer("Clean Name", "9000000002")
+    con = sqlite3.connect(database._db_path())
+    con.execute("UPDATE customers SET name=? WHERE id=?",
+                (f"Clean Name  —  9000000002  —  9000000002", corrupt_id))
+    con.execute(
+        "INSERT INTO tokens (token_no, customer_name, customer_mobile, "
+        "created_at, created_by_name) VALUES (?,?,?,?,?)",
+        ("TEST-CLEAN", "Clean Name  —  9000000002", "9000000002",
+         "2026-11-21 12:00:00", "tester"),
+    )
+    con.commit()
+    con.close()
+    init_db()
+    check("init_db repairs saved customer names",
+          get_customer(corrupt_id)["name"] == "Clean Name")
+    con = sqlite3.connect(database._db_path())
+    fixed = con.execute(
+        "SELECT customer_name FROM tokens WHERE token_no='TEST-CLEAN'"
+    ).fetchone()[0]
+    con.close()
+    check("init_db repairs saved token names", fixed == "Clean Name", str(fixed))
+
+    w = TokenWindow(user={"id": 1, "username": "admin",
+                          "display_name": "Admin", "is_admin": True})
+    model = w.name_completer.model()
+    row = next((i for i in range(model.rowCount())
+                if model.index(i, 0).data(Qt.ItemDataRole.UserRole) == corrupt_id), -1)
+    check("suggestion is in the completer", row >= 0)
+    if row >= 0:
+        index = model.index(row, 0)
+        check("popup label still shows the mobile",
+              "9000000002" in index.data(Qt.ItemDataRole.DisplayRole))
+        check("completion text is the name only",
+              index.data(Qt.ItemDataRole.EditRole) == "Clean Name",
+              str(index.data(Qt.ItemDataRole.EditRole)))
+        w._apply_name_suggestion(index)
+        check("picking a suggestion fills name only",
+              w.ed_name.text() == "Clean Name", w.ed_name.text())
+        check("picking a suggestion fills the mobile",
+              w.ed_mobile.text() == "9000000002", w.ed_mobile.text())
+        token = create_token(None, w.ed_name.text(), w.ed_mobile.text(),
+                             1, "Admin", [])
+        check("new token keeps the clean name",
+              token["customer_name"] == "Clean Name", token["customer_name"])
+    w.close()
+
+
 def test_backup_core():
     section("Backup core (Requirement 5)")
     check("default settings are empty",
@@ -566,6 +636,7 @@ def main():
         init_db()
         test_token_window()
         test_customer_management()
+        test_no_mobile_repeat()
         test_backup_core()
         test_backup_dialog()
         test_custom_paper_size()
